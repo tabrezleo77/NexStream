@@ -1,0 +1,42 @@
+# Environment files (contains credentials and secrets)
+.env
+.env.local
+.env.*
+
+# Downloaded files (large files and user-specific downloads)
+downloads/
+*.mp4
+*.mkv
+*.webm
+*.3gp
+*.mov
+*.part
+*.ytdl
+
+# Python cache and compilation files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.python-version
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+pyvenv.cfg
+
+# IDE and Editor configurations
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS-specific files
+Thumbs.db
+db.lock
+.DS_Store
