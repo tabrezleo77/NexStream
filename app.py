@@ -5,9 +5,6 @@ from dotenv import load_dotenv
 import yt_dlp
 import os
 import urllib.parse
-import shutil
-import tempfile
-import atexit
 
 # Load environment variables from .env file
 load_dotenv()
@@ -18,223 +15,165 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_fallback_secret_key')
 
 # Setup Rate Limiting (Protects API routes from scraping/denial of service)
-default_limits_str = os.getenv('DEFAULT_RATE_LIMIT', '100 per day,30 per hour')
-default_limits = [limit.strip() for limit in default_limits_str.split(',') if limit.strip()]
-
 limiter = Limiter(
     key_func=get_remote_address,
     app=app,
-    default_limits=default_limits,
+    default_limits=["100 per day", "30 per hour"],
     storage_uri="memory://"
 )
 
-# Resolve downloads directory from environment configuration
-download_folder_name = os.getenv('DOWNLOAD_FOLDER', 'downloads')
-if os.path.isabs(download_folder_name):
-    DOWNLOAD_DIR = download_folder_name
-else:
-    DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), download_folder_name)
+# Create a downloads directory next to app.py
+DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'downloads')
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# Resolve cookies configuration
-# Option 1: Use local cookies.txt file if present
-# Option 2: Dynamically write cookies from YOUTUBE_COOKIES environment variable (Render/Heroku secure approach)
-COOKIES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
-temp_cookie_path = None
-
-env_cookies = os.getenv('YOUTUBE_COOKIES')
-if env_cookies:
-    try:
-        # Standardize line breaks from env variable
-        formatted_cookies = env_cookies.replace('\\n', '\n').replace('\r\n', '\n')
-        
-        # Write to temporary file for yt-dlp to read
-        temp_fd, temp_cookie_path = tempfile.mkstemp(suffix='.txt')
-        with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
-            f.write(formatted_cookies)
-        
-        COOKIES_FILE = temp_cookie_path
-        print(f"Loaded secure cookies from environment variable into: {COOKIES_FILE}")
-    except Exception as e:
-        print(f"Failed to load secure cookies from environment variable: {e}")
-
-# Register temporary cookies cleanup at exit
-def cleanup_temp_cookies():
-    global temp_cookie_path
-    if temp_cookie_path and os.path.exists(temp_cookie_path):
-        try:
-            os.remove(temp_cookie_path)
-            print("Cleaned up temporary cookies file.")
-        except Exception:
-            pass
-
-atexit.register(cleanup_temp_cookies)
+# Helper to automatically load cookies if cookies.txt or COOKIES_FROM_BROWSER is present
+def get_ydl_opts(base_opts):
+    ydl_opts = base_opts.copy()
+    
+    # Check if cookies.txt exists in the root directory (recommended for server deployment)
+    cookies_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
+    if os.path.exists(cookies_file):
+        ydl_opts['cookiefile'] = cookies_file
+    else:
+        # Check if a browser is configured to extract cookies from (recommended for local development)
+        cookies_browser = os.getenv('COOKIES_FROM_BROWSER')
+        if cookies_browser:
+            ydl_opts['cookiesfrombrowser'] = (cookies_browser,)
+            
+    return ydl_opts
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
 # API Route to extract video metadata
+# Restricted to 10 extractions per minute per IP address
 @app.route('/api/extract', methods=['POST'])
-@limiter.limit(lambda: os.getenv('EXTRACT_LIMIT', '10 per minute'))
+@limiter.limit("10 per minute")
 def extract_video():
     try:
-        data = request.get_json() or {}
+        data = request.get_json()
         video_url = data.get('url')
         
         if not video_url:
             return jsonify({'error': 'Please provide a valid video URL.'}), 400
 
-        # Configure yt-dlp options for metadata extraction
-        ydl_opts = {
+        # Extract basic info
+        ydl_opts = get_ydl_opts({
             'format': 'best',
             'quiet': True,
             'no_warnings': True,
             'skip_download': True,
-        }
-
-        # Apply cookies if present (either file or temp file from env)
-        if COOKIES_FILE and os.path.exists(COOKIES_FILE):
-            ydl_opts['cookiefile'] = COOKIES_FILE
+        })
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Extract video info without downloading
             info = ydl.extract_info(video_url, download=False)
-            
-            # Detect platform
-            source = info.get('extractor_key', 'Unknown').upper()
-            if 'instagram' in video_url.lower() or 'instagram' in source.lower():
-                source = 'INSTAGRAM'
-            elif 'youtube' in video_url.lower() or 'youtu.be' in video_url.lower() or 'youtube' in source.lower():
-                source = 'YOUTUBE'
+            is_youtube = 'youtube' in info.get('extractor_key', '').lower() or 'youtube' in info.get('extractor', '').lower()
 
             formats = []
-            
-            # Construct server merge option (downloads & merges on server side)
+
+            # 1. Add High-Quality Server Merging Option (using /api/download)
             encoded_url = urllib.parse.quote(video_url)
-            
-            # Check if ffmpeg is available
-            ffmpeg_available = shutil.which('ffmpeg') is not None
-            
-            # If ffmpeg is missing, server can't merge bestvideo+bestaudio.
-            # We fallback to 'best' (pre-merged best quality video and audio stream)
-            server_format_id = 'bestvideo+bestaudio/best' if ffmpeg_available else 'best'
-            resolution_label = '1080p / 4K (Best Quality)' if ffmpeg_available else 'Best Quality (Pre-merged)'
-            
             formats.append({
-                'format_id': server_format_id,
-                'resolution': resolution_label,
+                'format_id': 'bestvideo+bestaudio/best',
+                'resolution': '1080p / 4K (Best Quality)',
                 'ext': 'mp4',
-                # This points to our backend downloader which will download and serve
-                'url': f'/api/download?url={encoded_url}&format_id={server_format_id}',
+                'url': f'/api/download?url={encoded_url}&format_id=bestvideo+bestaudio/best',
                 'is_direct': False,
                 'filesize': 0,
-                'badge': 'Server'
+                'badge': 'High Quality'
             })
 
-            # Process direct formats
-            direct_formats = []
+            # 2. Extract direct streams
             for fmt in info.get('formats', []):
-                # We need a direct stream url
-                url = fmt.get('url')
-                if not url:
-                    continue
-                
-                # Check if it has both video and audio stream to avoid direct silent downloads
                 vcodec = fmt.get('vcodec')
                 acodec = fmt.get('acodec')
-                is_combined = vcodec and vcodec != 'none' and acodec and acodec != 'none'
                 
-                if is_combined:
+                # Check for combined video + audio
+                if is_youtube:
+                    is_combined = vcodec and vcodec != 'none' and acodec and acodec != 'none'
+                else:
+                    is_combined = vcodec != 'none' and acodec != 'none'
+
+                if fmt.get('url') and is_combined:
                     resolution = fmt.get('resolution') or (f"{fmt.get('height')}p" if fmt.get('height') else "Unknown")
                     
-                    # Avoid showing generic "audio-only" or raw sizes
                     if "audio only" in resolution.lower():
                         continue
-                    
-                    direct_formats.append({
+
+                    formats.append({
                         'format_id': fmt.get('format_id'),
-                        'resolution': resolution,
+                        'resolution': f"{resolution} (Fast Direct)",
                         'ext': fmt.get('ext', 'mp4'),
-                        'url': url,
+                        'url': fmt.get('url'),
                         'is_direct': True,
                         'filesize': fmt.get('filesize') or fmt.get('filesize_approx') or 0,
                         'badge': 'Direct'
                     })
 
-            # Reverse to put highest direct qualities at the top (typically 720p, 360p)
+            # Reverse to put highest direct qualities at the top
+            direct_formats = [f for f in formats if f['is_direct']]
             direct_formats.reverse()
             
-            # Combine formats (server first, then direct)
-            formats.extend(direct_formats)
+            # Keep top 4 direct formats + 1 server format
+            final_formats = [formats[0]] + direct_formats[:4]
 
-            # Clean and prepare metadata response
             response_data = {
                 'title': info.get('title', 'Unknown Video'),
-                'author': info.get('uploader') or info.get('uploader_id') or 'Unknown Creator',
+                'author': info.get('uploader', 'Unknown Creator'),
                 'thumbnail': info.get('thumbnail', ''),
                 'duration': info.get('duration', 0),
-                'source': source,
-                'download_url': info.get('url'), # Best mixed format
-                'formats': formats[:8] # Send top 8 formats
+                'source': info.get('extractor_key', 'Unknown'),
+                'download_url': info.get('url'),
+                'formats': final_formats
             }
             return jsonify(response_data)
             
     except Exception as e:
         error_msg = str(e)
-        if "Incomplete YouTube ID" in error_msg or "not a valid URL" in error_msg or "Unsupported URL" in error_msg:
+        if "Incomplete YouTube ID" in error_msg or "not a valid URL" in error_msg:
             return jsonify({'error': 'Invalid URL format. Please check the link and try again.'}), 400
         return jsonify({'error': f'Failed to parse URL: {error_msg[:100]}...'}), 500
 
 # Backend Download and Merge Route
+# Restricted to 5 downloads per minute per IP to protect bandwidth
 @app.route('/api/download', methods=['GET'])
-@limiter.limit(lambda: os.getenv('DOWNLOAD_LIMIT', '5 per minute'))
+@limiter.limit("5 per minute")
 def download_video():
     video_url = request.args.get('url')
-    format_id = request.args.get('format_id', 'best')
+    format_id = request.args.get('format_id', 'bestvideo+bestaudio/best')
+
     if not video_url:
         return "Video URL parameter is missing", 400
-    try:
-        # Check if ffmpeg is available
-        ffmpeg_available = shutil.which('ffmpeg') is not None
-        
-        # If requested format_id needs merging but ffmpeg is missing, fallback to 'best'
-        actual_format = format_id
-        if 'bestvideo+bestaudio' in format_id and not ffmpeg_available:
-            actual_format = 'best'
 
-        # Configuration for downloading
-        ydl_opts = {
-            'format': actual_format,
+    try:
+        ydl_opts = get_ydl_opts({
+            'format': format_id,
             'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
             'quiet': True,
             'no_warnings': True,
-        }
-
-        # Apply cookies if present
-        if COOKIES_FILE and os.path.exists(COOKIES_FILE):
-            ydl_opts['cookiefile'] = COOKIES_FILE
+        })
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Download
             info = ydl.extract_info(video_url, download=True)
             filename = ydl.prepare_filename(info)
             
-            # Since yt-dlp might change extension (e.g. to mkv or mp4), let's locate the actual file
             base, _ = os.path.splitext(filename)
             actual_file = None
-            for ext in ['mp4', 'mkv', 'webm', '3gp', 'mov']:
+            for ext in ['mp4', 'mkv', 'webm', '3gp']:
                 test_path = f"{base}.{ext}"
                 if os.path.exists(test_path):
                     actual_file = test_path
                     break
+
             if not actual_file or not os.path.exists(actual_file):
                 actual_file = filename
+
             if os.path.exists(actual_file):
-                # Send the merged/downloaded file to user's browser
                 return send_file(actual_file, as_attachment=True)
             else:
                 return "Failed to find the downloaded file on server.", 404
+
     except Exception as e:
         return f"Error during server processing: {str(e)}", 500
 
@@ -247,5 +186,4 @@ def ratelimit_handler(e):
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
-    debug_mode = os.getenv('DEBUG', 'True').lower() == 'true'
-    app.run(debug=debug_mode, port=port)
+    app.run(debug=True, port=port)
