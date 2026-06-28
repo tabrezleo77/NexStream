@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexStream - Universal Downloader</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #060b16;
+            --card: rgba(10, 20, 38, .78);
+            --border: rgba(59, 130, 246, .15);
+            --blue: #2563eb;
+            --blueHover: #1d4ed8;
+            --blueGlow: rgba(37, 99, 235, .35);
+            --pink: #e1306c;
+            --pink2: #c13584;
+            --success: #059669;
+            --text: #f1f5f9;
+            --muted: #94a3b8;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        body::before {
+            content: "";
+            position: absolute;
+            width: 450px;
+            height: 450px;
+            background: #1d4ed8;
+            left: -120px;
+            top: -120px;
+            border-radius: 50%;
+            filter: blur(150px);
+            opacity: .28;
+            z-index: -1;
+        }
+
+        body::after {
+            content: "";
+            position: absolute;
+            width: 450px;
+            height: 450px;
+            background: #0891b2;
+            right: -120px;
+            bottom: -120px;
+            border-radius: 50%;
+            filter: blur(150px);
+            opacity: .28;
+            z-index: -1;
+        }
+
+        header {
+            padding: 35px 20px;
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff, #60a5fa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo span {
+            background: linear-gradient(135deg, #38bdf8, #2563eb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        main {
+            width: 100%;
+            max-width: 850px;
+            margin: auto;
+            padding: 20px;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card {
+            width: 100%;
+            background: var(--card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 20px 45px rgba(0, 0, 0, .5);
+        }
+
+        .title {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .title h1 {
+            font-size: 2.1rem;
+            margin-bottom: 10px;
+        }
+
+        .title p {
+            color: var(--muted);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 14px;
+            background: #132340;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: .3s;
+        }
+
+        .tab:hover {
+            transform: translateY(-2px);
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            box-shadow: 0 0 20px rgba(37, 99, 235, .4);
+        }
+
+        .tab.instagram.active {
+            background: linear-gradient(135deg, #fd5949, #d6249f, #285AEB);
+            box-shadow: 0 0 20px rgba(225, 48, 108, .4);
+        }
+
+        .input-group {
+            display: flex;
+            padding: 8px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, .03);
+            transition: .3s;
+        }
+
+        .input-group:focus-within {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 4px var(--blueGlow);
+        }
+
+        .input-group input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: white;
+            padding: 14px 18px;
+            font-size: 16px;
+        }
+
+        .input-group input::placeholder {
+            color: #6b7280;
+        }
+
+        .input-group button {
+            border: none;
+            padding: 14px 28px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: .3s;
+        }
+
+        .input-group button:hover {
+            transform: translateY(-2px);
+        }
+
+        .loader {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 35px 0;
+            gap: 15px;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, .15);
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loader p {
+            color: var(--muted);
+            font-size: 15px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: .5; }
+            50% { opacity: 1; }
+        }
+
+        .result {
+            display: none;
+            margin-top: 35px;
+            border-top: 1px solid var(--border);
+            padding-top: 30px;
+            animation: fade .4s ease;
+        }
+
+        @keyframes fade {
+            from {
+                opacity: 0;
+                transform: translateY(15px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .meta {
+            display: flex;
+            gap: 22px;
+            background: rgba(255, 255, 255, .02);
+            padding: 16px;
+            border-radius: 18px;
+            border: 1px solid var(--border);
+            margin-bottom: 25px;
+        }
+
+        .thumb {
+            width: 190px;
+            height: 110px;
+            border-radius: 12px;
+            overflow: hidden;
+            flex-shrink: 0;
+            background: #111;
+            position: relative;
+        }
+
+        .thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .duration-badge {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            font-size: 0.75rem;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .info {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .info h2 {
+            font-size: 20px;
+            margin-bottom: 8px;
+            line-height: 1.3;
+        }
+
+        .author {
+            color: var(--muted);
+            margin-bottom: 5px;
+        }
+
+        .source {
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: #38bdf8;
+            padding: 2px 8px;
+            background: rgba(56, 189, 248, 0.12);
+            border-radius: 6px;
+            width: fit-content;
+        }
+
+        .downloads {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 18px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, .03);
+            border: 1px solid var(--border);
+        }
+
+        .badge {
+            padding: 5px 12px;
+            border-radius: 8px;
+            background: rgba(37, 99, 235, .15);
+            color: #60a5fa;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .download {
+            text-decoration: none;
+            background: #059669;
+            color: white;
+            padding: 10px 18px;
+            border-radius: 10px;
+            font-weight: 600;
+            transition: .3s;
+        }
+
+        .download:hover {
+            transform: translateY(-2px);
+        }
+
+        footer {
+            padding: 30px;
+            text-align: center;
+            font-size: 14px;
+            color: var(--muted);
+            border-top: 1px solid var(--border);
+        }
+
+        @media(max-width: 700px) {
+            .card {
+                padding: 25px;
+            }
+
+            .tabs {
+                flex-direction: column;
+            }
+
+            .input-group {
+                flex-direction: column;
+                gap: 10px;
+                border: none;
+                padding: 0;
+                background: none;
+            }
+
+            .input-group input {
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                background: rgba(255, 255, 255, .03);
+            }
+
+            .input-group button {
+                width: 100%;
+            }
+
+            .meta {
+                flex-direction: column;
+            }
+
+            .thumb {
+                width: 100%;
+                height: 200px;
+            }
+
+            .item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+
+            .download {
+                width: 100%;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">Nex<span>Stream</span></div>
+    </header>
+
+    <main>
+        <div class="card">
+            <div class="title">
+                <h1>Universal Video Downloader</h1>
+                <p>Download YouTube Videos & Instagram Reels in HD</p>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" id="youtubeTab" onclick="setPlatform('youtube')">
+                    🎥 YouTube
+                </button>
+                <button class="tab instagram" id="instagramTab" onclick="setPlatform('instagram')">
+                    📷 Instagram Reels
+                </button>
+            </div>
+
+            <div class="input-group">
+                <input type="text" id="urlInput" placeholder="Paste YouTube URL">
+                <button id="extractBtn" onclick="processUrl()">
+                    Fetch Video
+                </button>
+            </div>
+
+            <div class="loader" id="loader">
+                <div class="spinner"></div>
+                <p>Analyzing...</p>
+            </div>
+
+            <div class="result" id="resultContainer">
+                <div class="meta">
+                    <div class="thumb">
+                        <img id="thumbImg" src="" alt="Thumbnail">
+                        <span id="durationBadge" class="duration-badge">0:00</span>
+                    </div>
+                    <div class="info">
+                        <h2 id="videoTitle">Video Title</h2>
+                        <div class="author" id="videoAuthor">Channel</div>
+                        <div class="source" id="videoSource">YOUTUBE</div>
+                    </div>
+                </div>
+
+                <h3>Available Downloads</h3>
+                <div class="downloads" id="downloadOptions"></div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        © 2026 NexStream. All Rights Reserved.
+    </footer>
+
+    <script>
+        let currentPlatform = 'youtube';
+
+        function setPlatform(platform) {
+            currentPlatform = platform;
+            const youtubeTab = document.getElementById('youtubeTab');
+            const instagramTab = document.getElementById('instagramTab');
+            const urlInput = document.getElementById('urlInput');
+
+            if (platform === 'youtube') {
+                youtubeTab.classList.add('active');
+                instagramTab.classList.remove('active');
+                urlInput.placeholder = 'Paste YouTube URL (e.g. https://www.youtube.com/watch?v=...)';
+            } else if (platform === 'instagram') {
+                instagramTab.classList.add('active');
+                youtubeTab.classList.remove('active');
+                urlInput.placeholder = 'Paste Instagram Reel or Post URL (e.g. https://www.instagram.com/reel/...)';
+            }
+        }
+
+        // Auto-detect platform from pasted URL
+        document.getElementById('urlInput').addEventListener('input', (e) => {
+            const val = e.target.value.trim().toLowerCase();
+            if (val.includes('instagram.com')) {
+                setPlatform('instagram');
+            } else if (val.includes('youtube.com') || val.includes('youtu.be')) {
+                setPlatform('youtube');
+            }
+        });
+
+        function formatDuration(seconds) {
+            if (!seconds) return '0:00';
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            
+            const sStr = s < 10 ? '0' + s : s;
+            if (h > 0) {
+                const mStr = m < 10 ? '0' + m : m;
+                return `${h}:${mStr}:${sStr}`;
+            }
+            return `${m}:${sStr}`;
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return 'Size unknown';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        async function processUrl() {
+            const urlInput = document.getElementById('urlInput').value.trim();
+            const loader = document.getElementById('loader');
+            const resultContainer = document.getElementById('resultContainer');
+            const extractBtn = document.getElementById('extractBtn');
+
+            if (!urlInput) {
+                alert("Please paste a valid video URL link.");
+                return;
+            }
+
+            // Simple validation alert to match tab selection
+            if (currentPlatform === 'instagram' && !urlInput.toLowerCase().includes('instagram.com')) {
+                const proceed = confirm("The URL does not look like an Instagram URL. Do you want to process it anyway?");
+                if (!proceed) return;
+            } else if (currentPlatform === 'youtube' && !(urlInput.toLowerCase().includes('youtube.com') || urlInput.toLowerCase().includes('youtu.be'))) {
+                const proceed = confirm("The URL does not look like a YouTube URL. Do you want to process it anyway?");
+                if (!proceed) return;
+            }
+
+            // Show loader, disable button, hide previous results
+            loader.style.display = 'flex';
+            resultContainer.style.display = 'none';
+            extractBtn.disabled = true;
+            extractBtn.style.opacity = '0.6';
+
+            try {
+                const response = await fetch('/api/extract', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: urlInput })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Populate video metadata
+                    document.getElementById('videoTitle').innerText = data.title;
+                    document.getElementById('videoAuthor').innerText = `Uploaded by: ${data.author}`;
+                    document.getElementById('thumbImg').src = data.thumbnail || 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=500';
+                    
+                    // Format duration or hide it if 0
+                    const durationBadge = document.getElementById('durationBadge');
+                    if (durationBadge) {
+                        durationBadge.innerText = formatDuration(data.duration);
+                        durationBadge.style.display = data.duration ? 'block' : 'none';
+                    }
+
+                    // Style the video source badge dynamically
+                    const sourceText = data.source || 'Unknown';
+                    const videoSourceEl = document.getElementById('videoSource');
+                    videoSourceEl.innerText = sourceText;
+                    
+                    if (sourceText.toUpperCase().includes('YOUTUBE')) {
+                        videoSourceEl.style.color = '#ef4444';
+                        videoSourceEl.style.background = 'rgba(239, 68, 68, 0.12)';
+                    } else if (sourceText.toUpperCase().includes('INSTAGRAM')) {
+                        videoSourceEl.style.color = '#fd5949';
+                        videoSourceEl.style.background = 'rgba(253, 89, 73, 0.12)';
+                    } else {
+                        videoSourceEl.style.color = '#38bdf8';
+                        videoSourceEl.style.background = 'rgba(56, 189, 248, 0.12)';
+                    }
+
+                    // Build download options list
+                    const optionsContainer = document.getElementById('downloadOptions');
+                    optionsContainer.innerHTML = '';
+
+                    // If we have distinct formats
+                    if (data.formats && data.formats.length > 0) {
+                        data.formats.forEach(format => {
+                            const sizeText = format.filesize ? ` • ${formatBytes(format.filesize)}` : '';
+                            const badgeLabel = format.is_direct ? 'Direct CDN' : 'Server Merge';
+                            
+                            const item = document.createElement('div');
+                            item.className = 'item';
+                            item.innerHTML = `
+                                <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                                    <span class="badge">${format.resolution}</span>
+                                    <span class="badge" style="background: ${format.is_direct ? 'rgba(16, 185, 129, 0.15)' : 'rgba(37, 99, 235, 0.15)'}; color: ${format.is_direct ? '#10b981' : '#60a5fa'}">${badgeLabel}</span>
+                                    <span style="font-size: 14px; color: var(--muted);">${format.ext.toUpperCase()} Video ${sizeText}</span>
+                                </div>
+                                <a class="download" style="background: ${format.is_direct ? '#059669' : '#2563eb'}" href="${format.url}" target="_blank" download="${data.title}.${format.ext}">
+                                    Download
+                                </a>
+                            `;
+                            optionsContainer.appendChild(item);
+                        });
+                    } else {
+                        // Fallback best link
+                        const item = document.createElement('div');
+                        item.className = 'item';
+                        item.innerHTML = `
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <span class="badge">Best Quality</span>
+                                <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">Direct CDN</span>
+                                <span style="font-size: 14px; color: var(--muted);">Universal Format</span>
+                            </div>
+                            <a class="download" href="${data.download_url}" target="_blank" download="${data.title}.mp4">
+                                Download
+                            </a>
+                        `;
+                        optionsContainer.appendChild(item);
+                    }
+
+                    // Display results
+                    resultContainer.style.display = 'block';
+                } else {
+                    alert(data.error || 'Failed to extract video information.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An error occurred during communication with the server.');
+            } finally {
+                loader.style.display = 'none';
+                extractBtn.disabled = false;
+                extractBtn.style.opacity = '1';
+            }
+        }
+    </script>
+</body>
+</html>
