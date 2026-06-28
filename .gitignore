@@ -1,42 +1,13 @@
-# Environment files (contains credentials and secrets)
-.env
-.env.local
-.env.*
+# Flask Configuration
+FLASK_ENV=development
+SECRET_KEY=57ae41fd623ecd56a2a1895f03dfcfe3c7b4f3d9f6804bfde2cb810e029a64ca
+PORT=5000
 
-# Downloaded files (large files and user-specific downloads)
-downloads/
-*.mp4
-*.mkv
-*.webm
-*.3gp
-*.mov
-*.part
-*.ytdl
+# Cookie Authentication (choose one method)
+# Option 1 - Local development: extract cookies from your browser
+COOKIES_FROM_BROWSER=chrome
+# Option 2 - Server deployment: path is auto-detected if cookies.txt is in root folder
+# (just place cookies.txt next to app.py, no variable needed)
 
-# Python cache and compilation files
-__pycache__/
-*.py[cod]
-*$py.class
-.pytest_cache/
-.python-version
-
-# Virtual environments
-venv/
-.venv/
-env/
-ENV/
-pyvenv.cfg
-
-# IDE and Editor configurations
-.vscode/
-.idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.swp
-
-# OS-specific files
-Thumbs.db
-db.lock
-.DS_Store
+# Optional: YouTube PO Token (extra bot detection bypass if cookies alone don't work)
+# PO_TOKEN=your_po_token_here
