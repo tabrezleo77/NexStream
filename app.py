@@ -29,7 +29,22 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 # Helper to automatically load cookies if cookies.txt or COOKIES_FROM_BROWSER is present
 def get_ydl_opts(base_opts):
     ydl_opts = base_opts.copy()
-    
+
+    # Spoof a real browser User-Agent to reduce bot detection
+    ydl_opts['http_headers'] = {
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/125.0.0.0 Safari/537.36'
+        ),
+        'Accept-Language': 'en-US,en;q=0.9',
+    }
+
+    # Use PO Token if configured (optional — set PO_TOKEN=... in .env)
+    po_token = os.getenv('PO_TOKEN')
+    if po_token:
+        ydl_opts['extractor_args'] = {'youtube': {'po_token': [po_token]}}
+
     # Check if cookies.txt exists in the root directory (recommended for server deployment)
     cookies_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
     if os.path.exists(cookies_file):
@@ -39,7 +54,7 @@ def get_ydl_opts(base_opts):
         cookies_browser = os.getenv('COOKIES_FROM_BROWSER')
         if cookies_browser:
             ydl_opts['cookiesfrombrowser'] = (cookies_browser,)
-            
+
     return ydl_opts
 
 @app.route('/')
