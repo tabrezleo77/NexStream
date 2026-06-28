@@ -1,5 +1,5 @@
-Flask
-Flask-Limiter
-python-dotenv
-yt-dlp
-gunicorn
+Flask>=3.0.0
+Flask-Limiter>=3.5.0
+python-dotenv>=1.0.0
+yt-dlp>=2024.1.1
+gunicorn>=21.2.0
