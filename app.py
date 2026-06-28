@@ -16,25 +16,34 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_fallback_secret_key')
 
 # Setup Rate Limiting (Protects API routes from scraping/denial of service)
+default_limits_str = os.getenv('DEFAULT_RATE_LIMIT', '100 per day,30 per hour')
+default_limits = [limit.strip() for limit in default_limits_str.split(',') if limit.strip()]
+
 limiter = Limiter(
     key_func=get_remote_address,
     app=app,
-    default_limits=["100 per day", "30 per hour"],
+    default_limits=default_limits,
     storage_uri="memory://"
 )
 
-# Create a downloads directory next to app.py
-DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'downloads')
+# Resolve downloads directory from environment configuration
+download_folder_name = os.getenv('DOWNLOAD_FOLDER', 'downloads')
+if os.path.isabs(download_folder_name):
+    DOWNLOAD_DIR = download_folder_name
+else:
+    DOWNLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), download_folder_name)
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+# Path to cookies.txt in the same directory (used to bypass YouTube bot detection)
+COOKIES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cookies.txt')
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
 # API Route to extract video metadata
-# Restricted to 10 extractions per minute per IP address
 @app.route('/api/extract', methods=['POST'])
-@limiter.limit("10 per minute")
+@limiter.limit(lambda: os.getenv('EXTRACT_LIMIT', '10 per minute'))
 def extract_video():
     try:
         data = request.get_json() or {}
@@ -50,6 +59,10 @@ def extract_video():
             'no_warnings': True,
             'skip_download': True,
         }
+
+        # Automatically apply cookies if cookies.txt is uploaded/present
+        if os.path.exists(COOKIES_FILE):
+            ydl_opts['cookiefile'] = COOKIES_FILE
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             # Extract video info without downloading
@@ -141,9 +154,8 @@ def extract_video():
         return jsonify({'error': f'Failed to parse URL: {error_msg[:100]}...'}), 500
 
 # Backend Download and Merge Route
-# Restricted to 5 downloads per minute per IP to protect bandwidth
 @app.route('/api/download', methods=['GET'])
-@limiter.limit("5 per minute")
+@limiter.limit(lambda: os.getenv('DOWNLOAD_LIMIT', '5 per minute'))
 def download_video():
     video_url = request.args.get('url')
     format_id = request.args.get('format_id', 'best')
@@ -161,11 +173,15 @@ def download_video():
         # Configuration for downloading
         ydl_opts = {
             'format': actual_format,
-            # Saves inside the local downloads directory
             'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
             'quiet': True,
             'no_warnings': True,
         }
+
+        # Automatically apply cookies if cookies.txt is uploaded/present
+        if os.path.exists(COOKIES_FILE):
+            ydl_opts['cookiefile'] = COOKIES_FILE
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             # Download
             info = ydl.extract_info(video_url, download=True)
@@ -198,4 +214,5 @@ def ratelimit_handler(e):
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
-    app.run(debug=True, port=port)
+    debug_mode = os.getenv('DEBUG', 'True').lower() == 'true'
+    app.run(debug=debug_mode, port=port)
