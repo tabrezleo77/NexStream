@@ -148,7 +148,7 @@ def extract_video():
             return jsonify({'error': 'Please provide a valid video URL.'}), 400
 
         ydl_opts = get_ydl_opts({
-            'format':        'best',
+            'format':        'bestvideo+bestaudio/best/bestvideo/bestaudio',
             'quiet':         True,
             'no_warnings':   True,
             'skip_download': True,
